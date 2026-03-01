@@ -1,0 +1,17 @@
+# Foundry artifacts
+contracts/out/
+contracts/cache/
+contracts/.gas-snapshot
+
+# Dependencies — instalar con: cd contracts && forge install
+contracts/lib/
+documentation/
+
+# Node
+web/node_modules/
+web/.next/
+
+# Env
+.env
+.env.local
+.env.*.local
