@@ -3,7 +3,7 @@ contracts/out/
 contracts/cache/
 contracts/.gas-snapshot
 
-# Dependencies — instalar con: cd contracts && forge install
+# Dependencies — forge install
 contracts/lib/
 documentation/
 
