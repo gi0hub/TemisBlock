@@ -6,32 +6,36 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /**
  * @title TemisBlock
- * @notice Platform-level NFT auction contract. Sellers escrow ERC721 tokens;
- *         bids are signed off-chain (EIP-712) and the winning bid is submitted
- *         on-chain to settle. Withdrawals use a two-step pattern.
+ * @notice Deposit-based NFT auction contract.
  *
- * Security properties:
- *  - ReentrancyGuard on all state-mutating externals
- *  - Pausable for emergency circuit-breaking
- *  - Checks-Effects-Interactions throughout
- *  - SafeERC20 + balance-delta accounting (handles fee-on-transfer tokens)
- *  - EIP-712 typed-data signature verification
- *  - Nonce == auctionId — scopes signatures to a specific auction, not globally
- *  - Two-step withdrawal with configurable delay
- *  - Seller-initiated cancel before endTime
- *  - emergencyCancel owner-only for post-deadline situations
+ *  Flow:
+ *    1. Bidders deposit(token, amount) — funds enter the contract.
+ *    2. Bids signed off-chain (EIP-712) at zero gas.
+ *    3. Platform relayer calls settleAuction with winning signature.
+ *       Settlement is a pure internal balance transfer + NFT delivery.
+ *    4. Participants withdraw via requestWithdrawal → executeWithdrawal (5 min delay).
+ *
+ *  Security:
+ *   - Deposit model makes troll-bidding impossible (funds locked inside contract;
+ *     withdrawal takes 5 min, relayer settles within seconds of endTime).
+ *   - cancelAuction restricted to relayer/owner (sellers cannot rug-pull).
+ *   - Fee snapshot at auction creation (owner cannot change fee after the fact).
+ *   - Ownable2Step: ownership transfers require explicit acceptance.
+ *   - renounceOwnership disabled: admin functions cannot be bricked.
+ *   - cancelWithdrawal: users can reclaim funds from a pending withdrawal request.
+ *   - ReentrancyGuard + Pausable + CEI throughout.
  */
 contract TemisBlock is
     IERC721Receiver,
     ReentrancyGuard,
-    Ownable,
+    Ownable2Step,
     Pausable,
     EIP712
 {
@@ -47,8 +51,6 @@ contract TemisBlock is
     uint256 public constant MIN_DURATION = 1 hours;
     uint256 public constant MAX_DURATION = 30 days;
     uint256 public constant MAX_FEE_BPS = 1000; // 10 %
-    // Window after endTime during which only settleAuction can run.
-    // Prevents claimUnsold from racing the platform relayer.
     uint256 public constant SETTLE_GRACE_PERIOD = 24 hours;
 
     // ─── Types ────────────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ contract TemisBlock is
         address payToken;
         uint256 reservePrice;
         uint256 endTime;
+        uint256 feeBps; // snapshot of platformFeeBps at creation time
         bool settled;
         bool cancelled;
     }
@@ -69,41 +72,35 @@ contract TemisBlock is
         uint256 unlockAt;
     }
 
-    // EIP-712 struct — nonce MUST equal auctionId when submitted on-chain.
-    // This binds signatures to a specific auction without a global counter.
     struct Bid {
         uint256 auctionId;
         address bidder;
         uint256 amount;
-        uint256 nonce;
+        uint256 nonce; // must equal auctionId on-chain
     }
 
     // ─── Storage ──────────────────────────────────────────────────────────────
 
     uint256 public nextAuctionId;
-    uint256 public withdrawalDelay = 1 hours;
+    uint256 public withdrawalDelay = 5 minutes;
     uint256 public platformFeeBps;
     address public feeRecipient;
-    // Only this address (or owner) can call settleAuction.
-    // Prevents losing bidders from self-settling with their own signed bid
-    // to win at below-market price, cheating the real winner and the seller.
     address public settlementRelayer;
 
-    // Transient guard: set true only during the safeTransferFrom in createAuction.
-    // Prevents arbitrary NFT deposits from external callers.
     bool private _acceptingNFT;
 
     mapping(uint256 => Auction) public auctions;
-
-    // user → token → claimable balance (seller proceeds + platform fees)
-    mapping(address => mapping(address => uint256)) public pendingBalances;
-
-    // user → token → queued withdrawal
+    mapping(address => mapping(address => uint256)) public balances;
     mapping(address => mapping(address => WithdrawalRequest))
         public withdrawalRequests;
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
+    event Deposited(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
     event AuctionCreated(
         uint256 indexed auctionId,
         address indexed seller,
@@ -111,30 +108,31 @@ contract TemisBlock is
         uint256 tokenId,
         address payToken,
         uint256 reservePrice,
-        uint256 endTime
+        uint256 endTime,
+        uint256 feeBps
     );
-
     event AuctionSettled(
         uint256 indexed auctionId,
         address indexed winner,
         uint256 amount
     );
-
     event AuctionCancelled(uint256 indexed auctionId);
-
     event WithdrawalRequested(
         address indexed user,
         address indexed token,
         uint256 amount,
         uint256 unlockAt
     );
-
+    event WithdrawalCancelled(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
     event WithdrawalExecuted(
         address indexed user,
         address indexed token,
         uint256 amount
     );
-
     event WithdrawalDelayUpdated(uint256 newDelay);
     event PlatformFeeUpdated(uint256 feeBps, address recipient);
     event SettlementRelayerUpdated(address relayer);
@@ -155,11 +153,16 @@ contract TemisBlock is
         settlementRelayer = relayer;
     }
 
+    // ─── Ownership Safety ────────────────────────────────────────────────────
+
+    /// @dev Ownership cannot be renounced — this would permanently brick
+    ///      pause/unpause, emergencyCancel, fee changes, and relayer rotation.
+    function renounceOwnership() public pure override {
+        revert("TemisBlock: cannot renounce ownership");
+    }
+
     // ─── IERC721Receiver ─────────────────────────────────────────────────────
 
-    /// @dev Only returns the acceptance selector when called during createAuction.
-    ///      Unsolicited NFT transfers are rejected to prevent tokens from being
-    ///      silently trapped with no matching auction record.
     function onERC721Received(
         address,
         address,
@@ -170,13 +173,27 @@ contract TemisBlock is
         return IERC721Receiver.onERC721Received.selector;
     }
 
+    // ─── Deposits ────────────────────────────────────────────────────────────
+
+    function deposit(address token, uint256 amount) external nonReentrant {
+        require(token != address(0), "TemisBlock: zero token");
+        require(amount > 0, "TemisBlock: zero amount");
+
+        // Note: the state update (balances +=) must follow the external call because
+        // `received` is computed from the actual post-transfer balance delta. This
+        // handles fee-on-transfer tokens correctly.
+        // CEI is enforced here by nonReentrant — any reentrant call to this contract
+        // from within safeTransferFrom will revert.
+        uint256 before = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = IERC20(token).balanceOf(address(this)) - before;
+
+        balances[msg.sender][token] += received;
+        emit Deposited(msg.sender, token, received);
+    }
+
     // ─── Auction Lifecycle ───────────────────────────────────────────────────
 
-    /**
-     * @notice Escrow an NFT and open a timed auction.
-     * @dev Caller must approve this contract on nftContract before calling.
-     *      Duration is bounded to [1 hour, 30 days] to avoid unusable auctions.
-     */
     function createAuction(
         address nftContract,
         uint256 tokenId,
@@ -190,7 +207,6 @@ contract TemisBlock is
         require(duration >= MIN_DURATION, "TemisBlock: duration too short");
         require(duration <= MAX_DURATION, "TemisBlock: duration too long");
 
-        // Accept only this safeTransferFrom, reject any others via onERC721Received
         _acceptingNFT = true;
         IERC721(nftContract).safeTransferFrom(
             msg.sender,
@@ -209,6 +225,7 @@ contract TemisBlock is
             payToken: payToken,
             reservePrice: reservePrice,
             endTime: endTime,
+            feeBps: platformFeeBps, // snapshot — cannot change after this point
             settled: false,
             cancelled: false
         });
@@ -220,23 +237,15 @@ contract TemisBlock is
             tokenId,
             payToken,
             reservePrice,
-            endTime
+            endTime,
+            platformFeeBps
         );
     }
 
     /**
-     * @notice Settle an ended auction with the winning EIP-712 signed bid.
-     * @dev Only callable by settlementRelayer or the contract owner.
-     *      This restriction prevents losing bidders from self-settling with their
-     *      own valid signed bids at below-market prices, which would cheat both
-     *      the real winner (who expected to win) and the seller (who expected the
-     *      higher clearing price).
-     *
-     *      The relayer is the platform API that observed all off-chain bids and
-     *      knows the true highest bid. The owner is the emergency fallback.
-     *
-     *      nonce must equal auctionId. Balance-delta accounting used for
-     *      fee-on-transfer token support.
+     * @notice Settle with the winning off-chain bid.
+     * @dev Only relayer or owner. Internal balance transfer + NFT delivery.
+     *      Uses auction.feeBps (snapshot at creation), not the current platformFeeBps.
      */
     function settleAuction(
         Bid calldata bid,
@@ -246,9 +255,9 @@ contract TemisBlock is
             msg.sender == settlementRelayer || msg.sender == owner(),
             "TemisBlock: unauthorized settler"
         );
+
         Auction storage auction = auctions[bid.auctionId];
 
-        // ── Checks ────────────────────────────────────────────────────────────
         require(!auction.settled, "TemisBlock: already settled");
         require(!auction.cancelled, "TemisBlock: cancelled");
         require(auction.endTime > 0, "TemisBlock: auction not found");
@@ -257,10 +266,18 @@ contract TemisBlock is
             "TemisBlock: auction not ended"
         );
         require(
+            block.timestamp <= auction.endTime + SETTLE_GRACE_PERIOD,
+            "TemisBlock: grace period over"
+        );
+        require(
             bid.amount >= auction.reservePrice,
             "TemisBlock: below reserve"
         );
         require(bid.nonce == bid.auctionId, "TemisBlock: invalid nonce");
+
+        // We do *not* require balances >= bid.amount here anymore because
+        // we might pull from their withdrawal queue.
+        // The check is performed at the effect stage below.
 
         bytes32 structHash = keccak256(
             abi.encode(
@@ -271,39 +288,49 @@ contract TemisBlock is
                 bid.nonce
             )
         );
-        address recovered = ECDSA.recover(_hashTypedDataV4(structHash), sig);
-        require(recovered == bid.bidder, "TemisBlock: invalid signature");
+        require(
+            ECDSA.recover(_hashTypedDataV4(structHash), sig) == bid.bidder,
+            "TemisBlock: invalid signature"
+        );
 
-        // ── Effects ───────────────────────────────────────────────────────────
+        // ── Effects — use auction.feeBps (snapshot), NOT platformFeeBps ──────
         auction.settled = true;
 
-        // Optimistic credit — adjusted below if the token charged a transfer fee
-        uint256 fee = (bid.amount * platformFeeBps) / 10_000;
+        uint256 fee = (bid.amount * auction.feeBps) / 10_000;
         uint256 sellerAmount = bid.amount - fee;
-        pendingBalances[auction.seller][auction.payToken] += sellerAmount;
-        pendingBalances[feeRecipient][auction.payToken] += fee;
 
-        // ── Interactions ──────────────────────────────────────────────────────
-        // Balance-delta: handles fee-on-transfer tokens where received < amount.
-        uint256 before = IERC20(auction.payToken).balanceOf(address(this));
-        IERC20(auction.payToken).safeTransferFrom(
-            bid.bidder,
-            address(this),
-            bid.amount
-        );
-        uint256 received = IERC20(auction.payToken).balanceOf(address(this)) -
-            before;
+        uint256 available = balances[bid.bidder][auction.payToken];
+        if (available >= bid.amount) {
+            balances[bid.bidder][auction.payToken] -= bid.amount;
+        } else {
+            // The bidder tried to escape their signed commitment by queueing a
+            // withdrawal right before the auction ended. Pull the shortfall from
+            // their pending withdrawal request so the settlement cannot be blocked.
+            uint256 shortfall = bid.amount - available;
+            WithdrawalRequest storage req = withdrawalRequests[bid.bidder][
+                auction.payToken
+            ];
 
-        if (received < bid.amount) {
-            // Proportionally reduce both shares by the shortfall
-            uint256 shortfall = bid.amount - received;
-            uint256 feeAdj = (shortfall * platformFeeBps) / 10_000;
-            pendingBalances[auction.seller][auction.payToken] -= (shortfall -
-                feeAdj);
-            pendingBalances[feeRecipient][auction.payToken] -= feeAdj;
+            require(
+                req.amount >= shortfall,
+                "TemisBlock: insufficient deposit & queue"
+            );
+
+            balances[bid.bidder][auction.payToken] -= available; // becomes 0
+            req.amount -= shortfall; // pull the rest from their withdrawal queue
+
+            if (req.amount == 0) {
+                delete withdrawalRequests[bid.bidder][auction.payToken];
+            }
         }
 
-        IERC721(auction.nftContract).safeTransferFrom(
+        balances[auction.seller][auction.payToken] += sellerAmount;
+        balances[feeRecipient][auction.payToken] += fee;
+
+        // ── Interactions ──────────────────────────────────────────────────────
+        // Use transferFrom instead of safeTransferFrom to prevent a malicious
+        // contract bidder from blocking the settlement by reverting in onERC721Received.
+        IERC721(auction.nftContract).transferFrom(
             address(this),
             bid.bidder,
             auction.tokenId
@@ -313,16 +340,19 @@ contract TemisBlock is
     }
 
     /**
-     * @notice Seller cancels their own auction before it ends.
-     *         NFT returns to the seller immediately.
-     *         Only valid while the auction is still live.
+     * @notice Cancel an auction before endTime (relayer/owner only).
+     *         The relayer only calls this when the API confirms zero active bids.
      */
     function cancelAuction(uint256 auctionId) external nonReentrant {
+        require(
+            msg.sender == settlementRelayer || msg.sender == owner(),
+            "TemisBlock: unauthorized"
+        );
         Auction storage auction = auctions[auctionId];
 
-        require(msg.sender == auction.seller, "TemisBlock: not seller");
         require(!auction.settled, "TemisBlock: already settled");
         require(!auction.cancelled, "TemisBlock: already cancelled");
+        require(auction.endTime > 0, "TemisBlock: auction not found");
         require(block.timestamp < auction.endTime, "TemisBlock: auction ended");
 
         auction.cancelled = true;
@@ -332,16 +362,11 @@ contract TemisBlock is
             auction.seller,
             auction.tokenId
         );
-
         emit AuctionCancelled(auctionId);
     }
 
     /**
-     * @notice Seller reclaims their NFT if the auction ended without a winner.
-     *         Callable only after endTime + SETTLE_GRACE_PERIOD (24 h).
-     *         The grace period prevents the seller from racing the platform relayer's
-     *         settleAuction call — if a valid winning bid exists, the relayer has 24 h
-     *         to settle before the seller can reclaim.
+     * @notice Seller reclaims NFT after endTime + SETTLE_GRACE_PERIOD with no settlement.
      */
     function claimUnsold(uint256 auctionId) external nonReentrant {
         Auction storage auction = auctions[auctionId];
@@ -354,22 +379,21 @@ contract TemisBlock is
             "TemisBlock: grace period active"
         );
 
-        auction.cancelled = true; // Mark as cancelled to prevent later settlement
+        auction.cancelled = true;
 
         IERC721(auction.nftContract).safeTransferFrom(
             address(this),
             auction.seller,
             auction.tokenId
         );
-
         emit AuctionCancelled(auctionId);
     }
 
     // ─── Two-Step Withdrawal ─────────────────────────────────────────────────
 
     /**
-     * @notice Queue a withdrawal. Starts the timelock.
-     *         Only one active request per (user, token) at a time.
+     * @notice Queue a withdrawal. Starts the timelock (default 5 min).
+     *         One active request per (user, token) at a time.
      */
     function requestWithdrawal(
         address token,
@@ -377,7 +401,7 @@ contract TemisBlock is
     ) external nonReentrant {
         require(amount > 0, "TemisBlock: zero amount");
         require(
-            pendingBalances[msg.sender][token] >= amount,
+            balances[msg.sender][token] >= amount,
             "TemisBlock: insufficient balance"
         );
         require(
@@ -385,15 +409,29 @@ contract TemisBlock is
             "TemisBlock: request already pending"
         );
 
-        pendingBalances[msg.sender][token] -= amount;
+        balances[msg.sender][token] -= amount;
         uint256 unlockAt = block.timestamp + withdrawalDelay;
 
         withdrawalRequests[msg.sender][token] = WithdrawalRequest({
             amount: amount,
             unlockAt: unlockAt
         });
-
         emit WithdrawalRequested(msg.sender, token, amount, unlockAt);
+    }
+
+    /**
+     * @notice Cancel a pending withdrawal request and return the funds to balances.
+     *         The user can then bid with those funds or create a new withdrawal request.
+     */
+    function cancelWithdrawal(address token) external nonReentrant {
+        WithdrawalRequest storage req = withdrawalRequests[msg.sender][token];
+        require(req.amount > 0, "TemisBlock: no pending request");
+
+        uint256 amount = req.amount;
+        delete withdrawalRequests[msg.sender][token];
+
+        balances[msg.sender][token] += amount;
+        emit WithdrawalCancelled(msg.sender, token, amount);
     }
 
     /**
@@ -409,16 +447,11 @@ contract TemisBlock is
         delete withdrawalRequests[msg.sender][token];
 
         IERC20(token).safeTransfer(msg.sender, amount);
-
         emit WithdrawalExecuted(msg.sender, token, amount);
     }
 
     // ─── Emergency ───────────────────────────────────────────────────────────
 
-    /**
-     * @notice Owner-only: cancel any auction regardless of timing.
-     *         Use when a seller cannot or should not run cancelAuction themselves.
-     */
     function emergencyCancel(
         uint256 auctionId
     ) external onlyOwner nonReentrant {
@@ -435,7 +468,6 @@ contract TemisBlock is
             auction.seller,
             auction.tokenId
         );
-
         emit AuctionCancelled(auctionId);
     }
 
@@ -474,7 +506,6 @@ contract TemisBlock is
 
     // ─── Views ───────────────────────────────────────────────────────────────
 
-    /// @notice EIP-712 domain separator — expose for frontend signing.
     function domainSeparator() external view returns (bytes32) {
         return _domainSeparatorV4();
     }
