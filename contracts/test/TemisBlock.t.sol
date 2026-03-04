@@ -26,7 +26,7 @@ contract TemisBlockTest is Test {
     uint256 bidderKey = 0xBEEF;
     address bidder = vm.addr(bidderKey);
 
-    uint256 constant FEE_BPS = 250; // 2.5 %
+    uint256 constant FEE_BPS = 150; // 1.5 %
     uint256 constant RESERVE = 100e6;
     uint256 constant BID_AMT = 200e6;
     uint256 constant DURATION = 1 days;
