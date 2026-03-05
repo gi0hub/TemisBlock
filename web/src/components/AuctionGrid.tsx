@@ -66,7 +66,7 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
 
     // Fallback pseudo-dynamic rendering until the user assigns real IPFS traits
     let actualNftImage = nftImage
-    if (!actualNftImage && nftName && nftName.includes("TemisArtifacts")) {
+    if (!actualNftImage && nftTokenId !== undefined) {
         const fallbacks = [
             undefined, // ID 0 is null
             "https://images.unsplash.com/photo-1614729939124-032f0b5610ce?q=80&w=720&auto=format&fit=crop", // ID 1
