@@ -218,6 +218,26 @@ export default function AuctionDetail() {
         return () => clearInterval(iv)
     }, [unlockTimeMs])
 
+    // Derived labels
+    // The following line was not present in the original document, but is implied by the instruction's context.
+    // Adding it here to allow the subsequent injection to be syntactically correct.
+    const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
+
+    // Fallback pseudo-dynamic rendering until the user assigns real IPFS traits
+    let actualNftImage = nftImage
+    if (!actualNftImage && nftName && nftName.includes("TemisArtifacts")) {
+        const fallbacks = [
+            undefined, // ID 0 is null
+            "https://images.unsplash.com/photo-1614729939124-032f0b5610ce?q=80&w=720&auto=format&fit=crop", // ID 1
+            "https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=720&auto=format&fit=crop", // ID 2
+            "https://images.unsplash.com/photo-1612053123018-971cbb668db3?q=80&w=720&auto=format&fit=crop", // ID 3
+        ]
+        const numId = Number(nftTokenId || 0)
+        if (numId > 0 && numId < fallbacks.length) {
+            actualNftImage = fallbacks[numId]
+        }
+    }
+
     return (
         <div className="space-y-4 relative">
             {/* Global Error Toast */}
@@ -260,8 +280,8 @@ export default function AuctionDetail() {
 
                     {/* Abstract structural 'image' OR REAL NFT IMAGE */}
                     <div className="mt-12 w-full aspect-square border border-[#333] relative flex items-center justify-center overflow-hidden bg-[#0A0A0A]">
-                        {nftImage ? (
-                            <img src={nftImage} alt="NFT Payload" className="w-full h-full object-cover relative z-10" />
+                        {actualNftImage ? (
+                            <img src={actualNftImage} alt="NFT Payload" className="w-full h-full object-cover relative z-10" />
                         ) : (
                             <>
                                 <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/stardust.png')] opacity-20" />

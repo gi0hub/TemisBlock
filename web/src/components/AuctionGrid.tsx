@@ -64,6 +64,21 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
     const priceText = reservePrice !== undefined ? `${Number(formatUnits(reservePrice, USDC_DECIMALS)).toFixed(2)} USDC` : '—'
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
+    // Fallback pseudo-dynamic rendering until the user assigns real IPFS traits
+    let actualNftImage = nftImage
+    if (!actualNftImage && nftName && nftName.includes("TemisArtifacts")) {
+        const fallbacks = [
+            undefined, // ID 0 is null
+            "https://images.unsplash.com/photo-1614729939124-032f0b5610ce?q=80&w=720&auto=format&fit=crop", // ID 1
+            "https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=720&auto=format&fit=crop", // ID 2
+            "https://images.unsplash.com/photo-1612053123018-971cbb668db3?q=80&w=720&auto=format&fit=crop", // ID 3
+        ]
+        const numId = Number(nftTokenId || 0)
+        if (numId > 0 && numId < fallbacks.length) {
+            actualNftImage = fallbacks[numId]
+        }
+    }
+
     return (
         <div className={`bg-[#050505] border border-[#333] -mt-px -ml-px p-6 flex flex-col h-[400px] justify-between group transition-colors relative select-none cursor-default ${isLive ? 'hover:bg-[#0A0A0A] z-10 hover:z-20' : 'opacity-60 grayscale'}`}>
             {/* Headers */}
@@ -84,8 +99,8 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
 
             {/* Image / Graphic */}
             <div className={`flex-1 flex items-center justify-center border border-[#111] mb-6 relative overflow-hidden transition-colors ${isLive ? 'group-hover:border-[#333]' : ''}`}>
-                {nftImage ? (
-                    <img src={nftImage} alt="NFT Box" className="w-[85%] h-[85%] object-cover relative z-10 opacity-80 group-hover:opacity-100 transition-opacity" />
+                {actualNftImage ? (
+                    <img src={actualNftImage} alt="NFT Box" className="w-[85%] h-[85%] object-cover relative z-10 opacity-80 group-hover:opacity-100 transition-opacity" />
                 ) : (
                     <>
                         <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/stardust.png')] opacity-10" />
