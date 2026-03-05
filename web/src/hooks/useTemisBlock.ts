@@ -3,7 +3,7 @@
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseUnits, formatUnits } from 'viem'
 import type { Address } from 'viem'
-import { TEMISBLOCK_ABI } from '@/lib/abi'
+import { TEMISBLOCK_ABI, ERC721_ABI } from '@/lib/abi'
 import { TEMISBLOCK_ADDRESS, USDC_ADDRESS, USDC_DECIMALS } from '@/lib/config'
 
 // -- ERC-20 Approve ABI (minimal) -------------------------------------------
@@ -135,4 +135,30 @@ export function useExecuteWithdrawal() {
 export function formatUsdc(raw: bigint | undefined): string {
     if (raw === undefined) return '—'
     return formatUnits(raw, USDC_DECIMALS)
+}
+
+/** Fetch ERC721 metadata on-chain */
+export function useNFTContractReads(nftAddress: `0x${string}` | undefined, tokenId: bigint | undefined) {
+    const { data: tokenURI } = useReadContract({
+        address: nftAddress,
+        abi: ERC721_ABI,
+        functionName: 'tokenURI',
+        args: tokenId !== undefined ? [tokenId] : undefined,
+        query: {
+            enabled: !!nftAddress && tokenId !== undefined,
+            staleTime: Infinity // URI won't change
+        }
+    })
+
+    const { data: name } = useReadContract({
+        address: nftAddress,
+        abi: ERC721_ABI,
+        functionName: 'name',
+        query: {
+            enabled: !!nftAddress,
+            staleTime: Infinity
+        }
+    })
+
+    return { tokenURI: tokenURI as string | undefined, name: name as string | undefined }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { getDefaultConfig, RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
-import { WagmiProvider } from 'wagmi'
+import { WagmiProvider, http, fallback } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CHAIN } from './config'
 import React, { useState } from 'react'
@@ -12,6 +12,9 @@ const wagmiConfig = getDefaultConfig({
     appName: 'TemisBlock NFT Auctions',
     projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '16b60bf43b7cf8c4a96b862dff9a5eb9',
     chains: [CHAIN],
+    transports: {
+        [CHAIN.id]: fallback([http('https://base-mainnet.infura.io/v3/8c085798a79a424fabeca102c79afa00')])
+    },
     ssr: true,
 })
 

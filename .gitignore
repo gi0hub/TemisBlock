@@ -1,6 +1,7 @@
 # Foundry artifacts
 contracts/out/
 contracts/cache/
+contracts/broadcast/
 contracts/.gas-snapshot
 
 # Dependencies — forge install
@@ -15,3 +16,18 @@ web/.next/
 .env
 .env.local
 .env.*.local
+
+# Vercel
+.vercel
+
+# OS
+.DS_Store
+
+# Next
+web/.next/
+web/out/
+web/build/
+
+# Temporary Data
+/tmp/
+tmp/

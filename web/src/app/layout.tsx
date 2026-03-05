@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 TemisBlock
               </span>
               <span className="hidden md:inline-block text-[10px] uppercase tracking-[0.2em] text-[#666]">
-                Network: Base Sepolia // Relayer: Active
+                Network: Base Mainnet // Relayer: Active
               </span>
             </div>
             <ConnectButtonClient />

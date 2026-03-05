@@ -8,10 +8,10 @@ import { formatUnits, parseUnits } from 'viem'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, SquareTerminal, CircleDashed, ArrowLeft } from 'lucide-react'
 
-import { useTemisBalance, useDeposit, useWithdrawalRequest, useRequestWithdrawal, useExecuteWithdrawal } from '@/hooks/useTemisBlock'
+import { useTemisBalance, useDeposit, useWithdrawalRequest, useRequestWithdrawal, useExecuteWithdrawal, useAuction, useNFTContractReads } from '@/hooks/useTemisBlock'
 import { useEip712Bid } from '@/hooks/useEip712Bid'
 import { useYellowWS } from '@/hooks/useYellowWS'
-import { USDC_DECIMALS, USDC_ADDRESS } from '@/lib/config'
+import { USDC_DECIMALS, USDC_ADDRESS, CHAIN_ID } from '@/lib/config'
 
 function fmt(val: bigint | undefined) {
     if (val === undefined) return '—'
@@ -35,6 +35,36 @@ export default function AuctionDetail() {
     const { address, isConnected } = useAccount()
     const publicClient = usePublicClient()
     const { data: balance, refetch: refetchBalance } = useTemisBalance()
+
+    const { data: auctionData } = useAuction(auctionId)
+    const nftContract = (auctionData as any)?.[1] as `0x${string}` | undefined
+    const nftTokenId = ((auctionData as any)?.[2] as bigint) ?? undefined
+    const { name: nftName, tokenURI } = useNFTContractReads(nftContract, nftTokenId)
+
+    const [nftImage, setNftImage] = useState<string | undefined>(undefined)
+
+    // Resolve standard ERC721 tokenURI JSON for an image
+    useEffect(() => {
+        if (!tokenURI) return
+        let url = tokenURI
+        if (url.startsWith('ipfs://')) {
+            url = url.replace('ipfs://', 'https://ipfs.io/ipfs/')
+        }
+
+        // If it's a URL we can fetch, try to get the JSON metadata
+        if (url.startsWith('http')) {
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    let img = data.image || data.image_url
+                    if (img && img.startsWith('ipfs://')) {
+                        img = img.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                    setNftImage(img)
+                })
+                .catch(e => console.error("Failed to map tokenURI metadata:", e))
+        }
+    }, [tokenURI])
 
     // Deposit System
     const { approve, deposit, isPending: isDepositing } = useDeposit()
@@ -127,7 +157,7 @@ export default function AuctionDetail() {
             const domain = {
                 name: 'Yellow Nitrolite',
                 version: '1',
-                chainId: 84532, // Based on Nitrolite Sepolia base chain
+                chainId: CHAIN_ID,
                 verifyingContract: sepoliaConfig?.adjudicator || '0x0000000000000000000000000000000000000000',
             } as const
 
@@ -177,7 +207,7 @@ export default function AuctionDetail() {
     const topBid = bids[0]
 
     // Timelock logic for withdrawals
-    const unlockTimeMs = withdrawalReq ? Number(withdrawalReq[1]) * 1000 : 0
+    const unlockTimeMs = withdrawalReq ? Number((withdrawalReq as any)[1]) * 1000 : 0
     const [timeToUnlock, setTimeToUnlock] = useState(0)
 
     useEffect(() => {
@@ -221,32 +251,38 @@ export default function AuctionDetail() {
                             <CircleDashed size={14} className="text-[#666] ml-4" />
                         </div>
                         <h1 className="text-6xl md:text-8xl font-extrabold uppercase leading-[0.85] font-display tracking-tighter break-words">
-                            OBSIDIAN<br />CORE<br />FRAGMENT
+                            {nftName ? nftName : 'UNKNOWN\nARTIFACT'}
                         </h1>
-                        <p className="max-w-md text-sm text-[#888] leading-relaxed pt-6 font-mono">
-                            A demonstrative cryptographic artifact showcasing zero-gas, high-frequency bidding capabilities via Yellow Network State Channels and Base Sepolia settlement.
+                        <p className="max-w-md text-sm text-[#888] leading-relaxed pt-6 font-mono break-all">
+                            {nftContract ? `Contract: ${nftContract}` : 'A demonstrative cryptographic artifact showcasing zero-gas, high-frequency bidding capabilities via Yellow Network State Channels and Base Mainnet settlement.'}
                         </p>
                     </div>
 
-                    {/* Abstract structural 'image' */}
+                    {/* Abstract structural 'image' OR REAL NFT IMAGE */}
                     <div className="mt-12 w-full aspect-square border border-[#333] relative flex items-center justify-center overflow-hidden bg-[#0A0A0A]">
-                        <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/stardust.png')] opacity-20" />
-                        <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
-                            className="w-3/4 h-3/4 border-t border-l border-white/20 absolute"
-                        />
-                        <motion.div
-                            animate={{ rotate: -360 }}
-                            transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
-                            className="absolute w-1/2 h-1/2 border-b border-r border-[#F5D90A]/50"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <SquareTerminal size={48} className="text-[#333]" />
-                        </div>
-                        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end text-[10px] uppercase font-mono text-[#666]">
-                            <span>Asset #0x0{auctionId.toString()}</span>
-                            <span>Unverified Origin</span>
+                        {nftImage ? (
+                            <img src={nftImage} alt="NFT Payload" className="w-full h-full object-cover relative z-10" />
+                        ) : (
+                            <>
+                                <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/stardust.png')] opacity-20" />
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+                                    className="w-3/4 h-3/4 border-t border-l border-white/20 absolute"
+                                />
+                                <motion.div
+                                    animate={{ rotate: -360 }}
+                                    transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
+                                    className="absolute w-1/2 h-1/2 border-b border-r border-[#F5D90A]/50"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <SquareTerminal size={48} className="text-[#333]" />
+                                </div>
+                            </>
+                        )}
+                        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end text-[10px] uppercase font-mono text-[#666] z-20 mix-blend-difference text-white">
+                            <span>Token ID: {nftTokenId?.toString() ?? '...'}</span>
+                            <span>{nftImage ? 'Verified Base Asset' : 'Unverified Origin'}</span>
                         </div>
                     </div>
                 </div>
@@ -367,9 +403,9 @@ export default function AuctionDetail() {
                                                 <p className="text-[10px] text-[#666] uppercase">5 minute anti-griefing timelock applies.</p>
                                             </div>
 
-                                            {withdrawalReq && Number(withdrawalReq[0]) > 0 ? (
+                                            {withdrawalReq && Number((withdrawalReq as any)[0]) > 0 ? (
                                                 <div className="bg-[#111] border border-[#333] p-4 text-center">
-                                                    <p className="text-xs text-white font-mono">{fmt(withdrawalReq[0] as bigint)} USDC queued</p>
+                                                    <p className="text-xs text-white font-mono">{fmt((withdrawalReq as any)[0] as bigint)} USDC queued</p>
                                                     {timeToUnlock > 0 ? (
                                                         <p className="text-[10px] text-[#F5D90A] mt-2 font-mono">Unlocks in {Math.ceil(timeToUnlock / 1000)}s</p>
                                                     ) : (

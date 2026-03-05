@@ -1,8 +1,7 @@
 import { base } from 'wagmi/chains'
 
-// ── Contract ────────────────────────────────────────────────────────────────
 export const TEMISBLOCK_ADDRESS =
-  (process.env.NEXT_PUBLIC_TEMISBLOCK_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`
+  (process.env.NEXT_PUBLIC_TEMISBLOCK_ADDRESS || "0x19Ca9a84b6732b73F4c358c9e774295E6c8F3bdB") as `0x${string}`
 
 export const USDC_ADDRESS =
   '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const // Circle USDC on Base Mainnet
