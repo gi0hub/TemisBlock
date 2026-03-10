@@ -387,6 +387,16 @@ export default function AuctionDetail() {
                                                 <ArrowRight size={14} />
                                             </button>
                                         </div>
+
+                                        {/* Onboarding Guide */}
+                                        <div className="pt-8 mt-8 border-t border-[#222]">
+                                            <h4 className="text-[10px] text-[#F5D90A] uppercase tracking-widest mb-4 font-bold">How to participate</h4>
+                                            <ol className="text-xs text-[#888] font-mono leading-relaxed space-y-4 list-decimal pl-4">
+                                                <li><strong className="text-white">Deposit USDC:</strong> Head to the "My Assets" tab above and deposit USDC into the secure smart contract. This provides proof of funds without spending it yet. You can withdraw your full balance back to your wallet at any time if you lose.</li>
+                                                <li><strong className="text-white">Bid with Zero Gas:</strong> Once deposited, you can sign as many bids as you want here for free. Each signature is validated instantly via Yellow Network State Channels.</li>
+                                                <li><strong className="text-white">Settlement:</strong> When the timer ends, our Relayer automatically submits the highest signed bid to the blockchain, transferring the precise USDC amount and sending the NFT payload to the winner.</li>
+                                            </ol>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-8">
