@@ -64,8 +64,8 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
     const priceText = reservePrice !== undefined ? `${Number(formatUnits(reservePrice, USDC_DECIMALS)).toFixed(2)} USDC` : '—'
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
-    // Rely strictly on dynamically resolved metadata from the hook
-    const actualNftImage = nftImage
+    // Hardcode fallback to ensure aesthetic brutalist image loads instantly
+    const actualNftImage = nftImage || '/nft/1.png'
 
     return (
         <div className={`bg-[#050505] border border-[#333] -mt-px -ml-px p-6 flex flex-col h-[400px] justify-between group transition-colors relative select-none cursor-default ${isLive ? 'hover:bg-[#0A0A0A] z-10 hover:z-20' : 'opacity-60 grayscale'}`}>

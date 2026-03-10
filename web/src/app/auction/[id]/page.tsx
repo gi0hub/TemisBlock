@@ -223,8 +223,8 @@ export default function AuctionDetail() {
     // Adding it here to allow the subsequent injection to be syntactically correct.
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
-    // Rely strictly on dynamically resolved metadata from the hook
-    const actualNftImage = nftImage
+    // Hardcode fallback to ensure aesthetic brutalist image loads instantly
+    const actualNftImage = nftImage || '/nft/1.png'
 
     return (
         <div className="space-y-4 relative">
