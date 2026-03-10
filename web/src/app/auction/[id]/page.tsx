@@ -261,13 +261,13 @@ export default function AuctionDetail() {
                         <h1 className="text-6xl md:text-8xl font-extrabold uppercase leading-[0.85] font-display tracking-tighter break-words">
                             {nftName ? nftName : 'UNKNOWN\nARTIFACT'}
                         </h1>
-                        <p className="max-w-md text-sm text-[#888] leading-relaxed pt-6 font-mono break-all">
+                        <p className="max-w-md text-sm text-[#888] leading-relaxed pt-2 font-mono break-all">
                             {nftContract ? `Contract: ${nftContract}` : 'A demonstrative cryptographic artifact showcasing zero-gas, high-frequency bidding capabilities via Yellow Network State Channels and Base Mainnet settlement.'}
                         </p>
                     </div>
 
                     {/* Abstract structural 'image' OR REAL NFT IMAGE */}
-                    <div className="mt-12 w-full aspect-square border border-[#333] relative flex items-center justify-center overflow-hidden bg-[#0A0A0A]">
+                    <div className="mt-6 w-full aspect-square border border-[#333] relative flex items-center justify-center overflow-hidden bg-[#0A0A0A]">
                         {actualNftImage ? (
                             <img src={actualNftImage} alt="NFT Payload" className="w-full h-full object-cover relative z-10" />
                         ) : (
