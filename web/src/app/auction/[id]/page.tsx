@@ -223,20 +223,8 @@ export default function AuctionDetail() {
     // Adding it here to allow the subsequent injection to be syntactically correct.
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
-    // Fallback pseudo-dynamic rendering until the user assigns real IPFS traits
-    let actualNftImage = nftImage
-    if (!actualNftImage && auctionId !== undefined) {
-        const fallbacks = [
-            undefined, // ID 0 is null
-            "https://images.unsplash.com/photo-1614729939124-032f0b5610ce?q=80&w=720&auto=format&fit=crop", // ID 1
-            "https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=720&auto=format&fit=crop", // ID 2
-            "https://images.unsplash.com/photo-1612053123018-971cbb668db3?q=80&w=720&auto=format&fit=crop", // ID 3
-        ]
-        const numId = Number(auctionId)
-        if (numId > 0 && numId < fallbacks.length) {
-            actualNftImage = fallbacks[numId]
-        }
-    }
+    // Always show our self-hosted NFT artwork (same Vercel domain = instant load)
+    const actualNftImage = nftImage || '/nft/1.png'
 
     return (
         <div className="space-y-4 relative">

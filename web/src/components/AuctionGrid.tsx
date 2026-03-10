@@ -64,20 +64,8 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
     const priceText = reservePrice !== undefined ? `${Number(formatUnits(reservePrice, USDC_DECIMALS)).toFixed(2)} USDC` : '—'
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
-    // Fallback pseudo-dynamic rendering until the user assigns real IPFS traits
-    let actualNftImage = nftImage
-    if (!actualNftImage && auctionId !== undefined) {
-        const fallbacks = [
-            undefined, // ID 0 is null
-            "https://images.unsplash.com/photo-1614729939124-032f0b5610ce?q=80&w=720&auto=format&fit=crop", // ID 1
-            "https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=720&auto=format&fit=crop", // ID 2
-            "https://images.unsplash.com/photo-1612053123018-971cbb668db3?q=80&w=720&auto=format&fit=crop", // ID 3
-        ]
-        const numId = Number(auctionId)
-        if (numId > 0 && numId < fallbacks.length) {
-            actualNftImage = fallbacks[numId]
-        }
-    }
+    // Always show our self-hosted NFT artwork (same Vercel domain = instant load)
+    const actualNftImage = nftImage || '/nft/1.png'
 
     return (
         <div className={`bg-[#050505] border border-[#333] -mt-px -ml-px p-6 flex flex-col h-[400px] justify-between group transition-colors relative select-none cursor-default ${isLive ? 'hover:bg-[#0A0A0A] z-10 hover:z-20' : 'opacity-60 grayscale'}`}>
