@@ -251,7 +251,7 @@ export default function AuctionDetail() {
             <div className="grid lg:grid-cols-2 gap-px bg-[#333] border border-[#333] selection:bg-[#F5D90A] selection:text-black">
 
                 {/* LEFT COLUMN: Editoral Poster */}
-                <div className="bg-black flex flex-col justify-between min-h-[600px] p-6 md:p-12 relative overflow-hidden">
+                <div className="bg-black flex flex-col justify-start min-h-[600px] p-6 md:p-12 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#F5D90A] opacity-[0.03] blur-[150px] pointer-events-none" />
                     <div className="space-y-4 relative z-10">
                         <div className="flex items-center justify-between brutal-border py-2 px-3 inline-flex bg-black">
