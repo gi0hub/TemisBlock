@@ -303,7 +303,12 @@ export default function AuctionDetail() {
                     {/* Abstract structural 'image' OR REAL NFT IMAGE */}
                     <div className="mt-6 w-full aspect-square border border-[#333] relative flex items-center justify-center overflow-hidden bg-[#0A0A0A]">
                         {actualNftImage ? (
-                            <img src={actualNftImage} alt="NFT Payload" className="w-full h-full object-cover relative z-10" />
+                            <img
+                                src={actualNftImage}
+                                alt="NFT Payload"
+                                className="w-full h-full object-cover relative z-10"
+                                onError={(e) => { e.currentTarget.src = '/nft/1.png' }}
+                            />
                         ) : (
                             <>
                                 <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/stardust.png')] opacity-20" />

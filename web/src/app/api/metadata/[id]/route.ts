@@ -61,7 +61,7 @@ const METADATA: Record<string, object> = {
 }
 
 export async function GET(
-    _req: NextRequest,
+    req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params
@@ -71,7 +71,19 @@ export async function GET(
         return NextResponse.json({ error: 'Token not found' }, { status: 404 })
     }
 
-    return NextResponse.json(metadata, {
+    // Dynamically derive the base URL from the request host to avoid dead links
+    // if the user hasn't set up the temisblock.vercel.app domain
+    const host = req.headers.get('host') || 'localhost:3000'
+    const protocol = host.includes('localhost') ? 'http' : 'https'
+    const dynamicBaseUrl = `${protocol}://${host}`
+
+    const dynamicMetadata = {
+        ...metadata,
+        image: (metadata as any).image.replace(BASE_URL, dynamicBaseUrl),
+        external_url: (metadata as any).external_url.replace(BASE_URL, dynamicBaseUrl)
+    }
+
+    return NextResponse.json(dynamicMetadata, {
         headers: {
             'Cache-Control': 'public, max-age=86400',
             'Content-Type': 'application/json',

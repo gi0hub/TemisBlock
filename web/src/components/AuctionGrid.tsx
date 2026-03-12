@@ -114,7 +114,12 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
             {/* Image / Graphic */}
             <div className={`flex-1 flex items-center justify-center border border-[#111] mb-6 relative overflow-hidden transition-colors ${isLive ? 'group-hover:border-[#333]' : ''}`}>
                 {actualNftImage ? (
-                    <img src={actualNftImage} alt="NFT Box" className="w-[85%] h-[85%] object-cover relative z-10 opacity-80 group-hover:opacity-100 transition-opacity" />
+                    <img
+                        src={actualNftImage}
+                        alt="NFT Box"
+                        className="w-[85%] h-[85%] object-cover relative z-10 opacity-80 group-hover:opacity-100 transition-opacity"
+                        onError={(e) => { e.currentTarget.src = '/nft/1.png' }}
+                    />
                 ) : (
                     <>
                         <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/stardust.png')] opacity-10" />
