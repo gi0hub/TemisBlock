@@ -22,7 +22,7 @@ const METADATA: Record<string, object> = {
     '2': {
         name: 'Temis Artifact #2 — Charged Fragment',
         description: 'Second edition of the Charged Fragment Series from the TemisBlock protocol. On-chain proof of a zero-gas bid executed across Yellow Network state channels.',
-        image: `${BASE_URL}/nft/1.png`,
+        image: `${BASE_URL}/nft/2.png`,
         external_url: `${BASE_URL}/auction/1`,
         attributes: [
             { trait_type: 'Protocol', value: 'TemisBlock' },
@@ -35,7 +35,7 @@ const METADATA: Record<string, object> = {
     '3': {
         name: 'Temis Artifact #3 — Charged Fragment',
         description: 'Third edition of the Charged Fragment Series. Rare protocol artifact issued on Base Mainnet via TemisBlock.',
-        image: `${BASE_URL}/nft/1.png`,
+        image: `${BASE_URL}/nft/3.png`,
         external_url: `${BASE_URL}/auction/2`,
         attributes: [
             { trait_type: 'Protocol', value: 'TemisBlock' },
