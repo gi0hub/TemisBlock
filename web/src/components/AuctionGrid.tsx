@@ -23,25 +23,51 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
     const { name: nftName, tokenURI } = useNFTContractReads(nftContract, nftTokenId)
     const [nftImage, setNftImage] = useState<string | undefined>(undefined)
 
-    // Resolve IPFS json metadata to actual image
+    // Resolve advanced multi-format tokenURI metadata to actual image
     useEffect(() => {
         if (!tokenURI) return
         let url = tokenURI
         if (url.startsWith('ipfs://')) {
             url = url.replace('ipfs://', 'https://ipfs.io/ipfs/')
+        } else if (url.startsWith('ar://')) {
+            url = url.replace('ar://', 'https://arweave.net/')
         }
 
+        // If the URI explicitly ends in a known image format, bypass fetching JSON and render directly
+        if (url.match(/\.(jpeg|jpg|gif|png|svg|webp)$/i)) {
+            setNftImage(url)
+            return
+        }
+
+        // Otherwise, probe the URL
         if (url.startsWith('http')) {
             fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    let img = data.image || data.image_url
-                    if (img && img.startsWith('ipfs://')) {
-                        img = img.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                .then(async (res) => {
+                    const contentType = res.headers.get('content-type')
+                    if (contentType && contentType.includes('image')) {
+                        setNftImage(url)
+                        return
                     }
-                    setNftImage(img)
+                    const text = await res.text()
+                    try {
+                        const data = JSON.parse(text)
+                        let img = data.image || data.image_url
+                        if (img) {
+                            if (img.startsWith('ipfs://')) {
+                                img = img.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                            } else if (img.startsWith('ar://')) {
+                                img = img.replace('ar://', 'https://arweave.net/')
+                            }
+                            setNftImage(img)
+                        }
+                    } catch (e) {
+                        setNftImage(url)
+                    }
                 })
-                .catch(e => console.error("Failed to map tokenURI metadata for grid:", e))
+                .catch(e => {
+                    console.error("Failed to map tokenURI metadata for grid:", e)
+                    setNftImage(url)
+                })
         }
     }, [tokenURI])
 
@@ -64,8 +90,8 @@ function AuctionBox({ auctionId }: { auctionId: bigint }) {
     const priceText = reservePrice !== undefined ? `${Number(formatUnits(reservePrice, USDC_DECIMALS)).toFixed(2)} USDC` : '—'
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
-    // Hardcode fallback to ensure aesthetic brutalist image loads instantly
-    const actualNftImage = nftImage || '/nft/1.png'
+    // Rely strictly on dynamically resolved metadata from the hook
+    const actualNftImage = nftImage
 
     return (
         <div className={`bg-[#050505] border border-[#333] -mt-px -ml-px p-6 flex flex-col h-[400px] justify-between group transition-colors relative select-none cursor-default ${isLive ? 'hover:bg-[#0A0A0A] z-10 hover:z-20' : 'opacity-60 grayscale'}`}>

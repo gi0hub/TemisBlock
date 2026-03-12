@@ -43,26 +43,53 @@ export default function AuctionDetail() {
 
     const [nftImage, setNftImage] = useState<string | undefined>(undefined)
 
-    // Resolve standard ERC721 tokenURI JSON for an image
     useEffect(() => {
         if (!tokenURI) return
         let url = tokenURI
         if (url.startsWith('ipfs://')) {
             url = url.replace('ipfs://', 'https://ipfs.io/ipfs/')
+        } else if (url.startsWith('ar://')) {
+            url = url.replace('ar://', 'https://arweave.net/')
         }
 
-        // If it's a URL we can fetch, try to get the JSON metadata
+        // If the URI explicitly ends in a known image format, bypass fetching JSON and render directly
+        if (url.match(/\.(jpeg|jpg|gif|png|svg|webp)$/i)) {
+            setNftImage(url)
+            return
+        }
+
+        // Otherwise, probe the URL
         if (url.startsWith('http')) {
             fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    let img = data.image || data.image_url
-                    if (img && img.startsWith('ipfs://')) {
-                        img = img.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                .then(async (res) => {
+                    // Check if the server explicitly tells us it's an image
+                    const contentType = res.headers.get('content-type')
+                    if (contentType && contentType.includes('image')) {
+                        setNftImage(url)
+                        return
                     }
-                    setNftImage(img)
+                    // Attempt to parse as JSON standard metadata
+                    const text = await res.text()
+                    try {
+                        const data = JSON.parse(text)
+                        let img = data.image || data.image_url
+                        if (img) {
+                            if (img.startsWith('ipfs://')) {
+                                img = img.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                            } else if (img.startsWith('ar://')) {
+                                img = img.replace('ar://', 'https://arweave.net/')
+                            }
+                            setNftImage(img)
+                        }
+                    } catch (e) {
+                        // If it's not valid JSON, fallback to trying to render the raw URL just in case
+                        setNftImage(url)
+                    }
                 })
-                .catch(e => console.error("Failed to map tokenURI metadata:", e))
+                .catch(e => {
+                    console.error("Failed to map tokenURI metadata:", e)
+                    setNftImage(url)
+                })
         }
     }, [tokenURI])
 
@@ -223,8 +250,8 @@ export default function AuctionDetail() {
     // Adding it here to allow the subsequent injection to be syntactically correct.
     const titleText = nftName ? nftName.toUpperCase() : 'LOADING...'
 
-    // Hardcode fallback to ensure aesthetic brutalist image loads instantly
-    const actualNftImage = nftImage || '/nft/1.png'
+    // Rely strictly on dynamically resolved metadata from the hook
+    const actualNftImage = nftImage
 
     return (
         <div className="space-y-4 relative">

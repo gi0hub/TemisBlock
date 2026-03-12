@@ -45,6 +45,19 @@ const METADATA: Record<string, object> = {
             { trait_type: 'Settlement Layer', value: 'Yellow Network' },
         ],
     },
+    '4': {
+        name: 'Temis Artifact #4 — Cyber-Core',
+        description: 'A futuristic brutalist cyber-core floating in an obsidian void. Securely encapsulates bidding state for high-frequency settlement channels.',
+        image: `${BASE_URL}/nft/4.png`,
+        external_url: `${BASE_URL}/`,
+        attributes: [
+            { trait_type: 'Protocol', value: 'TemisBlock' },
+            { trait_type: 'Network', value: 'Base Mainnet' },
+            { trait_type: 'Series', value: 'Cyber-Core' },
+            { trait_type: 'Edition', value: '1 of 1' },
+            { trait_type: 'Settlement Layer', value: 'Yellow Network' },
+        ],
+    },
 }
 
 export async function GET(
