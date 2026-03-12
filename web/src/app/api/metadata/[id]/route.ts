@@ -65,17 +65,31 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params
-    const metadata = METADATA[id]
 
-    if (!metadata) {
-        return NextResponse.json({ error: 'Token not found' }, { status: 404 })
-    }
-
-    // Dynamically derive the base URL from the request host to avoid dead links
-    // if the user hasn't set up the temisblock.vercel.app domain
+    // Dynamically derive the base URL from the active request host
     const host = req.headers.get('host') || 'localhost:3000'
     const protocol = host.includes('localhost') ? 'http' : 'https'
     const dynamicBaseUrl = `${protocol}://${host}`
+
+    const metadata = METADATA[id]
+
+    if (!metadata) {
+        // For unknown/new token IDs (e.g. freshly minted), serve a valid generic metadata response
+        // This ensures any NFT from TemisArtifacts is automatically detectable without manual API config
+        return NextResponse.json({
+            name: `Temis Artifact #${id}`,
+            description: 'A cryptographic artifact from the TemisBlock zero-gas auction protocol, powered by Yellow Network State Channels.',
+            image: `${dynamicBaseUrl}/nft/1.png`,
+            external_url: `${dynamicBaseUrl}/`,
+            attributes: [
+                { trait_type: 'Protocol', value: 'TemisBlock' },
+                { trait_type: 'Network', value: 'Base Mainnet' },
+                { trait_type: 'Settlement Layer', value: 'Yellow Network' },
+            ],
+        }, {
+            headers: { 'Cache-Control': 'no-cache', 'Content-Type': 'application/json' },
+        })
+    }
 
     const dynamicMetadata = {
         ...metadata,
