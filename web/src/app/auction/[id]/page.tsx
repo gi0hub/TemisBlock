@@ -39,6 +39,7 @@ export default function AuctionDetail() {
     const { data: auctionData } = useAuction(auctionId)
     const nftContract = (auctionData as any)?.[1] as `0x${string}` | undefined
     const nftTokenId = ((auctionData as any)?.[2] as bigint) ?? undefined
+    const reservePrice = (auctionData as any)?.[4] as bigint | undefined
     const { name: nftName, tokenURI } = useNFTContractReads(nftContract, nftTokenId)
 
     const [nftImage, setNftImage] = useState<string | undefined>(undefined)
@@ -348,7 +349,10 @@ export default function AuctionDetail() {
                         <div className="bg-[#0A0A0A] p-6 space-y-2 flex flex-col items-end text-right">
                             <span className="text-[10px] text-[#666] tracking-widest uppercase block">Current Ask</span>
                             <span className="text-3xl md:text-5xl font-light text-[#F5D90A] font-mono tracking-tighter">
-                                {topBid ? fmt(BigInt(topBid.amount ?? '0x0')) : '0.00'}
+                                {topBid
+                                    ? fmt(BigInt(topBid.amount ?? '0x0'))
+                                    : (reservePrice !== undefined ? fmt(reservePrice) : '0.00')
+                                }
                             </span>
                             <span className="text-[10px] text-[#666]">USDC</span>
                         </div>
