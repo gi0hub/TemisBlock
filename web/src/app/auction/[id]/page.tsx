@@ -107,8 +107,18 @@ export default function AuctionDetail() {
     // Withdrawal System
     const { data: withdrawalReq, refetch: refetchWithdrawal } = useWithdrawalRequest()
     const { requestWithdrawal, isPending: isReqWd } = useRequestWithdrawal()
-    const { executeWithdrawal, isPending: isExecWd } = useExecuteWithdrawal()
+    const { executeWithdrawal, isPending: isExecWd, isSuccess: isExecSuccess } = useExecuteWithdrawal()
     const [wdAmt, setWdAmt] = useState('')
+
+    useEffect(() => {
+        if (isExecSuccess && address) {
+            fetch('/api/withdraw-notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bidder: address })
+            }).catch(console.error)
+        }
+    }, [isExecSuccess, address])
 
     const [timer, setTimer] = useState('--:--:--')
     const [effectiveEnd, setEffectiveEnd] = useState<number | null>(null)

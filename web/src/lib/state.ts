@@ -71,6 +71,40 @@ export async function insertBid(bid: StoredBid): Promise<StoredBid> {
     return bid
 }
 
+/**
+ * Remove all bids from `bidder` across ALL auctions where their bid exceeds `newBalance`.
+ * Call this after a withdrawal is confirmed on-chain.
+ * Returns the number of bids purged.
+ */
+export async function purgeUnderfundedBids(bidder: string, newBalance: bigint): Promise<number> {
+    // Scan all auction bid keys in Redis
+    const keys: string[] = []
+    let cursor = 0
+    do {
+        const [nextCursor, batch] = await redis.scan(cursor, { match: 'auction:*:bids', count: 100 })
+        cursor = Number(nextCursor)
+        keys.push(...batch)
+    } while (cursor !== 0)
+
+    let purged = 0
+    for (const key of keys) {
+        const bids = await redis.get<StoredBid[]>(key)
+        if (!bids || bids.length === 0) continue
+
+        const filtered = bids.filter(b => {
+            if (b.bidder.toLowerCase() !== bidder.toLowerCase()) return true
+            const bidAmt = safeBigInt(b.amount)
+            return bidAmt <= newBalance  // keep only bids the user can still back
+        })
+
+        if (filtered.length !== bids.length) {
+            purged += bids.length - filtered.length
+            await redis.set(key, filtered)
+        }
+    }
+    return purged
+}
+
 /** Register an SSE subscriber */
 export function subscribe(auctionId: string, cb: (bid: StoredBid) => void): () => void {
     if (!subscribers.has(auctionId)) subscribers.set(auctionId, new Set())
